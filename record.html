@@ -60,6 +60,13 @@
       animation: pulse 1.5s infinite;
     }
 
+    .mic-button.disabled {
+      background: #ccc !important;
+      cursor: not-allowed !important;
+      pointer-events: none;
+      opacity: 0.6;
+    }
+
     .play-button {
       background: #4CAF50;
       color: white;
@@ -109,17 +116,19 @@
 
 <body>
   <div class="container">
-    
-    <div class="mic-button" id="micButton" onmousedown="startRecording()" onmouseup="stopRecording()" ontouchstart="startRecording()" ontouchend="stopRecording()">
+    <h2>🎙️ 录音</h2>
+    <div class="mic-button disabled" id="micButton"
+         onmousedown="startRecording()" onmouseup="stopRecording()"
+         ontouchstart="startRecording()" ontouchend="stopRecording()">
       <i class="fas fa-microphone"></i>
     </div>
-
-    <div class="status" id="status">长按开始录音</div>
-
+    <div class="status" id="status">
+      请先授权麦克风...<br>
+      <span style="color:#c00;font-size:13px;">首次录音需授权，请点击允许麦克风权限</span>
+    </div>
     <button class="play-button" onclick="bofangRecord()" id="playButton" disabled>
       <i class="fas fa-play"></i> 播放录音
     </button>
-
     <audio class="audio-player" controls></audio>
   </div>
 
@@ -130,18 +139,41 @@
     const status = document.getElementById('status');
     const playButton = document.getElementById('playButton');
 
+    // 先禁用按钮，页面加载后请求授权
+    window.onload = function() {
+      micButton.classList.add('disabled');
+      status.innerHTML = '请先授权麦克风...<br><span style="color:#c00;font-size:13px;">首次录音需授权，请点击允许麦克风权限</span>';
+      navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      }).then(mediaStream => {
+        window.mediaStream = mediaStream;
+        micButton.classList.remove('disabled');
+        status.textContent = '长按开始录音';
+      }).catch(err => {
+        status.textContent = '未授权麦克风，无法录音';
+      });
+    };
+
     function startRecording() {
+      if (micButton.classList.contains('disabled')) return;
       if (!isRecording) {
         isRecording = true;
         recordingStartTime = Date.now();
         micButton.classList.add('recording');
         status.textContent = '正在录音...';
-        record();
+        // 重新清空数据，保证只保留最后一次录音
+        leftDataList = [];
+        rightDataList = [];
         beginRecord(window.mediaStream);
       }
     }
 
     function stopRecording() {
+      if (micButton.classList.contains('disabled')) return;
       if (isRecording) {
         isRecording = false;
         micButton.classList.remove('recording');
@@ -151,64 +183,6 @@
       }
     }
 
-    function record() {
-        // 检查是否支持 getUserMedia
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-            alert('您的浏览器不支持录音功能，请使用最新版本的Chrome、Firefox或Safari浏览器');
-            return;
-        }
-
-        // 检查访问方式
-        const protocol = window.location.protocol;
-        const hostname = window.location.hostname;
-        
-        if (protocol === 'http:' && hostname !== 'localhost' && hostname !== '127.0.0.1') {
-            alert('为了安全起见，移动设备上必须通过以下方式之一访问：\n\n' +
-                  '1. 使用 HTTPS 协议访问\n' +
-                  '2. 使用 localhost 或 127.0.0.1 访问\n' +
-                  '3. 使用 file:// 协议直接打开文件\n\n' +
-                  '当前访问方式：' + protocol + '//' + hostname);
-            return;
-        }
-
-        const constraints = {
-            audio: {
-                echoCancellation: true,
-                noiseSuppression: true,
-                autoGainControl: true
-            }
-        };
-
-        window.navigator.mediaDevices.getUserMedia(constraints)
-            .then(mediaStream => {
-                console.log('成功获取媒体流:', mediaStream);
-                window.mediaStream = mediaStream;
-            })
-            .catch(err => {
-                console.error('获取媒体流失败:', err);
-                let errorMessage = '获取麦克风权限失败: ';
-                switch(err.name) {
-                    case 'NotAllowedError':
-                    case 'PermissionDeniedError':
-                        errorMessage += '请允许访问麦克风';
-                        break;
-                    case 'NotFoundError':
-                    case 'DevicesNotFoundError':
-                        errorMessage += '未找到麦克风设备';
-                        break;
-                    case 'NotReadableError':
-                    case 'TrackStartError':
-                        errorMessage += '麦克风被占用';
-                        break;
-                    case 'SecurityError':
-                        errorMessage += '请在HTTPS环境下使用';
-                        break;
-                    default:
-                        errorMessage += err.message || '未知错误';
-                }
-                alert(errorMessage);
-            });
-    }
     function beginRecord(mediaStream) {
         let audioContext = new (window.AudioContext || window.webkitAudioContext);
         let mediaNode = audioContext.createMediaStreamSource(mediaStream);
